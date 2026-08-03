@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: vet, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -v
+
+      - name: build (full: CLI + serve)
+        run: go build -o devia .
+
+      - name: build (CLI-only, -tags noserve)
+        run: go build -tags noserve -o devia-cli .
+
+      - name: smoke test
+        run: |
+          ./devia hash --algo=sha256 "ci smoke test"
+          ./devia uuid
+          echo '{"a":1}' | ./devia json format
+          ./devia-cli hash --algo=sha256 "ci smoke test"
+
+  # Windows and macOS builds are handled by build.sh / build.bat locally
+  # (see the Makefile). Add them to this matrix if you'd like automatic
+  # cross-platform CI coverage too.

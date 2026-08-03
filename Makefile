@@ -1,4 +1,4 @@
-.PHONY: build build-min build-all clean size vet help
+.PHONY: build build-min build-all clean size vet test help
 
 build: ## Full binary (CLI + `devia serve`) for the current platform, stripped
 	go build -trimpath -ldflags="-s -w" -o devia .
@@ -11,6 +11,9 @@ build-all: ## Cross-compile both variants for linux/windows/macos, amd64+arm64
 
 vet: ## Run go vet (static analysis) across the whole module
 	go vet ./...
+
+test: ## Run the test suite (core package)
+	go test ./... -v
 
 size: build build-min ## Build both variants and print their sizes
 	@echo "full (CLI+API): $$(du -h devia | cut -f1)"
