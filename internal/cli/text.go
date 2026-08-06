@@ -1,10 +1,10 @@
-package main
+package cli
 
 import (
 	"fmt"
 	"os"
 
-	"devia/core"
+	"devia/internal/core"
 )
 
 func cmdText(args []string) {

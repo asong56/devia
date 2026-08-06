@@ -1,0 +1,125 @@
+name: release
+
+# Three ways this runs:
+#   - push / pull_request: fast sanity check only (vet + native build).
+#   - workflow_dispatch: manual run from the Actions tab; check the
+#     "publish_release" input to also build all 3 release zips and
+#     attach them to the workflow run as artifacts.
+#   - push of a "v*" tag: full build of all 3 platform zips + draft
+#     GitHub Release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Also publish a draft GitHub Release with all 3 zips"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  # Runs on every push/PR: catches compile errors and go vet issues
+  # immediately instead of only finding out when someone runs `make build`.
+  verify:
+    name: vet & build (sanity check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go vet ./...
+      - name: build devia (full — CLI + serve)
+        run: go build -trimpath -ldflags="-s -w" -o /tmp/devia ./cmd/devia
+      - name: build devia-cli (cli-only, -tags noserve)
+        run: go build -tags noserve -trimpath -ldflags="-s -w" -o /tmp/devia-cli ./cmd/devia
+      - name: print sizes
+        run: ls -lh /tmp/devia /tmp/devia-cli
+
+  # Builds both binaries (devia + devia-cli) for each of the 3 shipped
+  # platforms and packages them together into a single zip per platform.
+  # Only runs for a version tag or an explicit manual dispatch.
+  release-build:
+    name: ${{ matrix.zip }}
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            zip: devia-darwin-arm64.zip
+          - goos: linux
+            goarch: amd64
+            zip: devia-linux-amd64.zip
+          - goos: windows
+            goarch: amd64
+            zip: devia-windows-x64.zip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: build both binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            go build           -trimpath -ldflags="-s -w" -o dist/devia.exe     ./cmd/devia
+            go build -tags noserve -trimpath -ldflags="-s -w" -o dist/devia-cli.exe ./cmd/devia
+          else
+            go build           -trimpath -ldflags="-s -w" -o dist/devia         ./cmd/devia
+            go build -tags noserve -trimpath -ldflags="-s -w" -o dist/devia-cli     ./cmd/devia
+          fi
+          ls -lh dist/
+
+      - name: zip both binaries into one archive
+        run: |
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -X "${{ matrix.zip }}" devia.exe devia-cli.exe
+          else
+            zip -X "${{ matrix.zip }}" devia devia-cli
+          fi
+          ls -lh "${{ matrix.zip }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.zip }}
+          path: dist/${{ matrix.zip }}
+
+  # Publishes a draft release with the 3 zips attached.
+  release:
+    name: publish release
+    needs: release-build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: flatten artifacts into one directory
+        run: |
+          mkdir -p out
+          find dist -type f -name "*.zip" -exec cp {} out/ \;
+          ls -lh out/
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body_path: RELEASE_NOTES.md
+          files: out/*.zip

@@ -6,10 +6,11 @@
 // what makes devia-cli meaningfully smaller than devia. `devia serve`
 // still exists as a command in this build; it just reports plainly
 // that this particular binary doesn't include it.
-package main
+package server
 
 import "errors"
 
-func runServer(host string, port int) error {
+// Run reports that the API isn't built into this binary.
+func Run(host string, port int) error {
 	return errors.New("this binary was built with -tags noserve and does not include the API server; rebuild without that tag (`make build`) to get `devia serve`")
 }

@@ -1,3 +1,3 @@
 module devia
 
-go 1.22
+go 1.26

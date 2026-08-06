@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"devia/core"
+	"devia/internal/core"
 )
 
 func cmdTimestamp(args []string) {
