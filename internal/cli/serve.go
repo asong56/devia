@@ -8,7 +8,7 @@ func cmdServe(args []string) {
 	host := fs.String("host", "127.0.0.1", "address to bind (127.0.0.1 = local only)")
 	parseArgs(fs, args)
 
-	if err := server.Run(*host, *port); err != nil {
+	if err := server.Run(*host, *port, quietMode); err != nil {
 		fail(err)
 	}
 }

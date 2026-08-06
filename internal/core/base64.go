@@ -45,15 +45,28 @@ func Base64EncodeFile(path string, asDataURI bool) (string, error) {
 	return encoded, nil
 }
 
+// Base64DecodeBytes decodes base64 (optionally a data: URI, whose
+// header is stripped automatically) and returns the raw bytes without
+// writing anything — the building block both Base64DecodeToFile and
+// the CLI's `base64 decode --dry-run` use, so dry-run and the real
+// write path can never disagree about what "valid input" means.
+func Base64DecodeBytes(text string) ([]byte, error) {
+	text = stripDataURIPrefix(strings.TrimSpace(text))
+	b, err := base64.StdEncoding.DecodeString(text)
+	if err != nil {
+		return nil, NewInputError("invalid base64 input: " + err.Error())
+	}
+	return b, nil
+}
+
 // Base64DecodeToFile decodes base64 (optionally a data: URI, whose
 // header is stripped automatically) and writes the raw bytes to
 // outPath, which is the safe way to round-trip binary content such as
 // images through the CLI.
 func Base64DecodeToFile(text, outPath string) error {
-	text = stripDataURIPrefix(strings.TrimSpace(text))
-	b, err := base64.StdEncoding.DecodeString(text)
+	b, err := Base64DecodeBytes(text)
 	if err != nil {
-		return NewInputError("invalid base64 input: " + err.Error())
+		return err
 	}
 	return os.WriteFile(outPath, b, 0o644)
 }

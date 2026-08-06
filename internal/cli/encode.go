@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"strconv"
 
 	"devia/internal/core"
 )
@@ -16,6 +17,7 @@ func cmdBase64(args []string) {
 	fs := newFlagSet("base64 " + sub)
 	file := fs.String("file", "", "read input from this file (binary-safe — use for images)")
 	out := fs.String("out", "", "decode: write raw bytes to this file instead of stdout")
+	dryRun := fs.Bool("dry-run", false, "decode --out: validate and report what would be written, without writing")
 	dataURI := fs.Bool("data-uri", false, "encode: wrap output as a data: URI (detects common image types)")
 	urlSafe := fs.Bool("url", false, "use the URL-safe base64 alphabet")
 	parseArgs(fs, rest)
@@ -42,11 +44,26 @@ func cmdBase64(args []string) {
 			usageError(err.Error())
 		}
 		if *out != "" {
+			if *dryRun {
+				decoded, err := core.Base64DecodeBytes(text)
+				if err != nil {
+					fail(err)
+				}
+				if jsonMode {
+					printResult(map[string]interface{}{"dry_run": true, "path": *out, "bytes": len(decoded)})
+					return
+				}
+				printResult("dry run: would write " + strconv.Itoa(len(decoded)) + " bytes to " + *out)
+				return
+			}
 			if err := core.Base64DecodeToFile(text, *out); err != nil {
 				fail(err)
 			}
 			printResult("written to " + *out)
 			return
+		}
+		if *dryRun {
+			usageError("--dry-run only applies to decode --out (stdout output has nothing to preview)")
 		}
 		result, err := core.Base64DecodeText(text, *urlSafe)
 		if err != nil {

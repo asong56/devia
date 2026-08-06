@@ -21,8 +21,11 @@ import (
 )
 
 // Run starts the JSON API and blocks until it exits (normally only on
-// error, since http.ListenAndServe never returns nil).
-func Run(host string, port int) error {
+// error, since http.ListenAndServe never returns nil). When quiet is
+// true, the startup banner below is suppressed — everything else
+// (errors, HTTP responses) is unaffected, since --quiet only ever
+// touches informational chatter.
+func Run(host string, port int, quiet bool) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", handleIndex)
 	mux.HandleFunc("GET /api/v1/health", handleHealth)
@@ -46,8 +49,10 @@ func Run(host string, port int) error {
 	mux.HandleFunc("POST /api/v1/cert/decode", handleCertDecode)
 
 	addr := fmt.Sprintf("%s:%d", host, port)
-	fmt.Fprintf(os.Stderr, "devia: API listening on http://%s (Ctrl+C to stop)\n", addr)
-	fmt.Fprintf(os.Stderr, "devia: docs at            http://%s/\n", addr)
+	if !quiet {
+		fmt.Fprintf(os.Stderr, "devia: API listening on http://%s (Ctrl+C to stop)\n", addr)
+		fmt.Fprintf(os.Stderr, "devia: docs at            http://%s/\n", addr)
+	}
 	return http.ListenAndServe(addr, mux)
 }
 

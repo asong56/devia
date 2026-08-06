@@ -27,6 +27,13 @@ const (
 // without guessing at a text format.
 var jsonMode bool
 
+// quietMode is set once at startup from the global -q/--quiet flag.
+// It suppresses purely informational stderr chatter (e.g. the "serve"
+// startup banner) — it never suppresses errors. Errors are the one
+// thing --quiet must not hide: a quiet tool that swallows failures
+// silently is worse than a noisy one.
+var quietMode bool
+
 type jsonEnvelope struct {
 	OK     bool        `json:"ok"`
 	Result interface{} `json:"result,omitempty"`
@@ -58,14 +65,20 @@ func printResult(result interface{}) {
 // fail prints err and exits with its standard code. stdout carries the
 // JSON envelope in --json mode (so stdout is always valid JSON when
 // that flag is set, success or failure); stderr always carries a
-// human-readable line regardless of mode, since something crawling
-// stderr for logs shouldn't need --json to see what broke.
+// human-readable explanation regardless of mode or --quiet, since
+// something crawling stderr for logs shouldn't need --json to see what
+// broke, and a failure is never something --quiet should hide.
+//
+// The stderr block follows a fixed shape — one line naming what
+// failed, then a blank line and a "Try:" line naming the next step —
+// so the answer to "what do I do about this" is never more than two
+// lines away from the error itself.
 func fail(err error) {
 	code := core.CodeOf(err)
 	if jsonMode {
 		json.NewEncoder(os.Stdout).Encode(jsonEnvelope{OK: false, Error: err.Error(), Code: code})
 	}
-	fmt.Fprintln(os.Stderr, "devia: error:", err)
+	printErrorBlock("error", err.Error(), recoveryHint(code))
 	os.Exit(code)
 }
 
@@ -75,9 +88,35 @@ func usageError(msg string) {
 	if jsonMode {
 		json.NewEncoder(os.Stdout).Encode(jsonEnvelope{OK: false, Error: msg, Code: ExitUsage})
 	}
-	fmt.Fprintln(os.Stderr, "devia: usage error:", msg)
-	fmt.Fprintln(os.Stderr, "run `devia help` for usage")
+	printErrorBlock("usage error", msg, "devia help")
 	os.Exit(ExitUsage)
+}
+
+// printErrorBlock writes the fixed-shape stderr error report. The
+// first line's format ("devia: <kind>: <msg>") is kept stable on its
+// own so any existing `grep '^devia: error:'` still matches — only the
+// "Try:" line is new.
+func printErrorBlock(kind, msg, hint string) {
+	fmt.Fprintf(os.Stderr, "devia: %s: %s\n", kind, msg)
+	if hint != "" {
+		fmt.Fprintf(os.Stderr, "\nTry:\n  %s\n", hint)
+	}
+}
+
+// recoveryHint gives a generic next step keyed on the error's code —
+// not on its exact message, so this stays one small switch instead of
+// threading a bespoke hint through every one of core's ~30 error
+// sites. CodeNotFound and CodeInput get a more specific nudge; other
+// codes fall back to pointing at help.
+func recoveryHint(code int) string {
+	switch code {
+	case core.CodeNotFound:
+		return "check the path and try again"
+	case core.CodeInput:
+		return "devia help   (to check the expected input format)"
+	default:
+		return "devia help"
+	}
 }
 
 // readInput returns arg if non-empty, otherwise reads stdin if it's

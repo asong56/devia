@@ -12,6 +12,15 @@ import (
 	"devia/internal/version"
 )
 
+// commandNames is the single source of truth for devia's top-level
+// subcommands — used by the "unknown command" hint and by `devia
+// completion`, so the two can never drift apart from the switch below.
+var commandNames = []string{
+	"hash", "checksum", "base64", "json", "escape", "unescape", "uuid",
+	"text", "lorem", "timestamp", "radix", "cron", "regex", "diff",
+	"cert", "serve", "completion", "help", "version",
+}
+
 // Run parses args (typically os.Args[1:]) and dispatches to the
 // matching command. It never returns normally — every path ends in
 // os.Exit, which is what keeps the exit-code contract (see output.go)
@@ -20,6 +29,12 @@ func Run(args []string) {
 	var found bool
 	args, found = extractFlag(args, "--json")
 	jsonMode = found
+	args, found = extractFlag(args, "--quiet")
+	quietMode = found
+	if !quietMode {
+		args, found = extractFlag(args, "-q")
+		quietMode = found
+	}
 
 	if len(args) == 0 {
 		printHelp()
@@ -68,6 +83,8 @@ func Run(args []string) {
 		cmdCert(rest)
 	case "serve":
 		cmdServe(rest)
+	case "completion":
+		cmdCompletion(rest)
 	default:
 		usageError("unknown command: " + cmd)
 	}
@@ -95,12 +112,18 @@ func printHelp() {
 	fmt.Print(`devia - a small, scriptable developer toolbox (zero dependencies)
 
 Usage:
-  devia [--json] <command> [subcommand] [flags] [args]
+  devia [flags] <command> [subcommand] [flags] [args]
+
+Global flags:
+  -h, --help      show this help
+  -v, --version   print the version
+  -q, --quiet     suppress non-essential stderr chatter (errors still show)
+      --json      emit a single JSON line instead of plain text
 
 Commands:
   hash        --algo=md5|sha1|sha256|sha512 [--hmac=key] [--base64] [--file=path] [text]
   checksum    [--algo=..] [--compare=hash] <file>
-  base64      encode|decode [--file=path] [--out=path] [--data-uri] [--url] [text]
+  base64      encode|decode [--file=path] [--out=path] [--dry-run] [--data-uri] [--url] [text]
   json        format|minify|validate [--indent=".."] [--file=path] [text]
   escape      json|url|url-path|html|unicode [text]
   unescape    json|url|url-path|html|unicode [text]
@@ -117,6 +140,7 @@ Commands:
   diff        --a=file --b=file | <textA> <textB>
   cert        decode <file>                               (or pipe PEM via stdin)
   serve       [--host=127.0.0.1] [--port=7654]            start the JSON API
+  completion  bash|zsh|fish                               print a completion script
 
 Input:
   The last positional argument is the input. If omitted, devia reads
