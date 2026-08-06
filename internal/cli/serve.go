@@ -1,4 +1,6 @@
-package main
+package cli
+
+import "devia/internal/server"
 
 func cmdServe(args []string) {
 	fs := newFlagSet("serve")
@@ -6,7 +8,7 @@ func cmdServe(args []string) {
 	host := fs.String("host", "127.0.0.1", "address to bind (127.0.0.1 = local only)")
 	parseArgs(fs, args)
 
-	if err := runServer(*host, *port); err != nil {
+	if err := server.Run(*host, *port); err != nil {
 		fail(err)
 	}
 }

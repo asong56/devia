@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"devia/core"
+	"devia/internal/core"
 )
 
 // Exit codes. Mirrors core's Code* constants exactly, kept as separate

@@ -1,15 +1,22 @@
-package main
+// Package cli implements devia's command-line interface: argument
+// dispatch, the shared flag/output helpers, and every command's CLI
+// adapter. Every command's actual logic lives in devia/internal/core;
+// this package (and internal/server for the HTTP API) is a thin,
+// script-friendly shell around it.
+package cli
 
 import (
 	"fmt"
 	"os"
+
+	"devia/internal/version"
 )
 
-const version = "1.0.0"
-
-func main() {
-	args := os.Args[1:]
-
+// Run parses args (typically os.Args[1:]) and dispatches to the
+// matching command. It never returns normally — every path ends in
+// os.Exit, which is what keeps the exit-code contract (see output.go)
+// centralized in one place instead of scattered across commands.
+func Run(args []string) {
 	var found bool
 	args, found = extractFlag(args, "--json")
 	jsonMode = found
@@ -27,7 +34,7 @@ func main() {
 		printHelp()
 		os.Exit(ExitOK)
 	case "version", "-v", "--version":
-		fmt.Println("devia " + version)
+		fmt.Println("devia " + version.Version)
 		os.Exit(ExitOK)
 	case "hash":
 		cmdHash(rest)
@@ -127,5 +134,5 @@ Output:
 Exit codes:
   0 ok   1 internal error   2 usage error   3 invalid input   4 not found
 
-devia version ` + version + "\n")
+devia version ` + version.Version + "\n")
 }

@@ -4,8 +4,8 @@
 #   devia-cli-<os>-<arch>   -tags noserve: CLI only, no net/http linked
 #
 # Every build is -trimpath -ldflags="-s -w" (strip symbol table + DWARF
-# debug info + embedded file paths). This alone typically cuts a Go
-# binary's size by 25-35%.
+# debug info + embedded file paths) with CGO_ENABLED=0 (static,
+# no cgo). This alone typically cuts a Go binary's size by 25-35%.
 set -euo pipefail
 
 mkdir -p build
@@ -28,11 +28,11 @@ for p in "${platforms[@]}"; do
 
   echo "==> $os/$arch (full: CLI + serve)"
   GOOS=$os GOARCH=$arch CGO_ENABLED=0 \
-    go build -trimpath -ldflags="$LDFLAGS" -o "build/devia-$os-$arch$ext" .
+    go build -trimpath -ldflags="$LDFLAGS" -o "build/devia-$os-$arch$ext" ./cmd/devia
 
   echo "==> $os/$arch (cli-only, -tags noserve)"
   GOOS=$os GOARCH=$arch CGO_ENABLED=0 \
-    go build -tags noserve -trimpath -ldflags="$LDFLAGS" -o "build/devia-cli-$os-$arch$ext" .
+    go build -tags noserve -trimpath -ldflags="$LDFLAGS" -o "build/devia-cli-$os-$arch$ext" ./cmd/devia
 done
 
 echo ""

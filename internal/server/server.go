@@ -1,11 +1,11 @@
 //go:build !noserve
 
-// This file is excluded from the "noserve" build (see server_stub.go),
-// which produces devia-cli: a smaller binary for people who only want
-// the command line and never touch net/http at all. Everything here
-// calls straight into the same core package the CLI uses — the API is
-// a thin adapter, not a second implementation.
-package main
+// This file is excluded from the "noserve" build (see stub.go), which
+// produces devia-cli: a smaller binary for people who only want the
+// command line and never touch net/http at all. Everything here calls
+// straight into the same core package the CLI uses — the API is a
+// thin adapter, not a second implementation.
+package server
 
 import (
 	"encoding/base64"
@@ -16,10 +16,13 @@ import (
 	"strings"
 	"time"
 
-	"devia/core"
+	"devia/internal/core"
+	"devia/internal/version"
 )
 
-func runServer(host string, port int) error {
+// Run starts the JSON API and blocks until it exits (normally only on
+// error, since http.ListenAndServe never returns nil).
+func Run(host string, port int) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", handleIndex)
 	mux.HandleFunc("GET /api/v1/health", handleHealth)
@@ -99,7 +102,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeOK(w, map[string]string{"name": "devia", "version": version})
+	writeOK(w, map[string]string{"name": "devia", "version": version.Version})
 }
 
 func handleHash(w http.ResponseWriter, r *http.Request) {

@@ -7,17 +7,17 @@ set CGO_ENABLED=0
 echo ==^> windows/amd64 (full: CLI + serve)
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags="-s -w" -o build\devia-windows-amd64.exe .
+go build -trimpath -ldflags="-s -w" -o build\devia-windows-amd64.exe .\cmd\devia
 
 echo ==^> windows/amd64 (cli-only, -tags noserve)
-go build -tags noserve -trimpath -ldflags="-s -w" -o build\devia-cli-windows-amd64.exe .
+go build -tags noserve -trimpath -ldflags="-s -w" -o build\devia-cli-windows-amd64.exe .\cmd\devia
 
 echo ==^> windows/arm64 (full: CLI + serve)
 set GOARCH=arm64
-go build -trimpath -ldflags="-s -w" -o build\devia-windows-arm64.exe .
+go build -trimpath -ldflags="-s -w" -o build\devia-windows-arm64.exe .\cmd\devia
 
 echo ==^> windows/arm64 (cli-only, -tags noserve)
-go build -tags noserve -trimpath -ldflags="-s -w" -o build\devia-cli-windows-arm64.exe .
+go build -tags noserve -trimpath -ldflags="-s -w" -o build\devia-cli-windows-arm64.exe .\cmd\devia
 
 echo.
 dir build

@@ -1,9 +1,9 @@
-package main
+package cli
 
 import (
 	"os"
 
-	"devia/core"
+	"devia/internal/core"
 )
 
 func cmdBase64(args []string) {
