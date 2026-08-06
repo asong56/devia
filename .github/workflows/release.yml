@@ -1,12 +1,5 @@
 name: release
 
-# Three ways this runs:
-#   - push / pull_request: fast sanity check only (vet + native build).
-#   - workflow_dispatch: manual run from the Actions tab; check the
-#     "publish_release" input to also build all 3 release zips and
-#     attach them to the workflow run as artifacts.
-#   - push of a "v*" tag: full build of all 3 platform zips + draft
-#     GitHub Release.
 on:
   push:
     branches: [main]
@@ -27,8 +20,6 @@ env:
   GO_VERSION: "1.26"
 
 jobs:
-  # Runs on every push/PR: catches compile errors and go vet issues
-  # immediately instead of only finding out when someone runs `make build`.
   verify:
     name: vet & build (sanity check)
     runs-on: ubuntu-latest
@@ -45,9 +36,6 @@ jobs:
       - name: print sizes
         run: ls -lh /tmp/devia /tmp/devia-cli
 
-  # Builds both binaries (devia + devia-cli) for each of the 3 shipped
-  # platforms and packages them together into a single zip per platform.
-  # Only runs for a version tag or an explicit manual dispatch.
   release-build:
     name: ${{ matrix.zip }}
     needs: verify
@@ -103,7 +91,6 @@ jobs:
           name: ${{ matrix.zip }}
           path: dist/${{ matrix.zip }}
 
-  # Publishes a draft release with the 3 zips attached.
   release:
     name: publish release
     needs: release-build
