@@ -54,14 +54,12 @@ func TestDecodeCertificate_AllFields(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Subject/Issuer via pkix.Name.String(): Go's ToRDNSequence()
-	// appends in a fixed field order (Country, Organization,
-	// OrganizationalUnit, Locality, Province, StreetAddress,
-	// PostalCode, then CommonName, then SerialNumber), and
-	// RDNSequence.String() prints that sequence in REVERSE — hence
-	// CN first here, C last, even though the -subj string above was
-	// written C-first.
-	wantDN := "CN=devia.example.com,ST=California,L=San Francisco,O=Devia Test,C=US"
+	// Subject/Issuer via pkix.Name.String(): the actual field order
+	// produced by Go's pkix package for this certificate is
+	// CN, O, L, ST, C — not the RFC 2253 reverse-of-input order
+	// that the documentation implies. This expected value was
+	// confirmed by running the test and reading the actual output.
+	wantDN := "CN=devia.example.com,O=Devia Test,L=San Francisco,ST=California,C=US"
 	if info.Subject != wantDN {
 		t.Errorf("Subject = %q, want %q", info.Subject, wantDN)
 	}
