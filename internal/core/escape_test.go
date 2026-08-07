@@ -91,7 +91,7 @@ func TestEscapeUnescapeURL_RoundTrip(t *testing.T) {
 func TestUnescapeURL_InvalidPercentEncoding(t *testing.T) {
 	_, err := UnescapeURL("100%", false)
 	if err == nil {
-		t.Fatal("expected an error for a truncated %-escape, got nil")
+		t.Fatal("expected an error for a truncated percent-escape, got nil")
 	}
 	if CodeOf(err) != CodeInput {
 		t.Errorf("CodeOf(err) = %d, want CodeInput (%d)", CodeOf(err), CodeInput)
