@@ -1,12 +1,18 @@
-.PHONY: build build-min build-all clean size vet help
+.PHONY: build build-min build-all test test-race clean size vet help
 
-build: ## Full binary (CLI + `devia serve`) for the current platform, stripped
+test: ## Run the test suite (internal/core, internal/cli, cmd/devia black-box)
+	go test -count=1 ./...
+
+test-race: ## Same as test, with the race detector enabled
+	go test -race -count=1 ./...
+
+build: test ## Full binary (CLI + `devia serve`) for the current platform, stripped
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o devia ./cmd/devia
 
-build-min: ## CLI-only binary (-tags noserve), no net/http linked, smallest size
+build-min: test ## CLI-only binary (-tags noserve), no net/http linked, smallest size
 	CGO_ENABLED=0 go build -tags noserve -trimpath -ldflags="-s -w" -o devia-cli ./cmd/devia
 
-build-all: ## Cross-compile both variants for linux/windows/macos, amd64+arm64
+build-all: test ## Cross-compile both variants for linux/windows/macos, amd64+arm64
 	bash build.sh
 
 vet: ## Run go vet (static analysis) across the whole module

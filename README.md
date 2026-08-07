@@ -44,7 +44,14 @@ go build ./cmd/devia
 | Shell 自动补全 | ✅ 这轮新增 | `devia completion bash\|zsh\|fish`，零依赖（标准库 `fmt`/`strings` 拼字符串），只补全一级子命令名字，不做 flag 级补全——理由同 `--dry-run`：flag 级补全意味着要把每个 `FlagSet` 的所有 flag 同步进补全脚本并永远保持同步，收益远低于"至少能把命令名字面全"这个基本需求 |
 | glob 输入 | ✅ 已满足（免费的） | 所有吃文件路径的命令（`checksum`、`json --file`、`diff --a/--b`、`cert decode`）走的是普通位置参数/flag，shell 自己会展开 `*.json` 这种 glob，devia 不需要自己实现 |
 | 无配置/无账号/无云依赖 | ✅ 已满足 | 没有配置文件、没有登录状态、`serve` 是完全本地可选的，`download → run → done` |
-| 恶意输入 / 边界情况 | ⚠️ 部分满足 | 有 `CodeInput` 这个专门的错误类别，绝大多数解析函数（JSON/base64/cron/regex/证书）都对格式错误返回结构化错误而不是 panic；但**没有自动化测试套件**——这份代码目前是我人工审查+逻辑走查出来的，没有真正跑过 `go test`，"用真实畸形输入测过"这条我没法打勾，如果你要我补一批 `_test.go`（尤其是覆盖畸形输入的），说一声，这是当前最大的诚实缺口 |
+| 恶意输入 / 边界情况 | ✅ 这轮补了测试 | 184 个测试函数，19 个 `_test.go` 文件，覆盖 `internal/core` 全部 16 个业务文件 + `internal/cli` 的纯函数部分 + 一套通过子进程重新执行自身二进制的黑盒测试（`cmd/devia/main_test.go`，专门测 `os.Exit`/退出码/`--json`/stdin 管道这些没法在进程内直接测的行为）。写测试的过程中真的挖出并修了两个此前没发现的 bug（见下面「这轮写测试时顺手修的」）。**诚实的边界**：这份测试代码本身没有在这个沙箱里真正跑过 `go test`——没有 Go 工具链——我做的是逐行人工核对 + 用 Python 独立算出每个断言里的期望值（`hashlib`/`base64`/`datetime` 算哈希和时间戳，手写一份等价的 diff 算法在 Python 里跑出预期输出，用真实 `openssl` 生成测试证书再核对字段），但"这些测试真的能通过"这句话我没法拍胸脯保证，第一次跑 `go test ./...` 请把结果发我 |
+
+## 这轮写测试时顺手修的
+
+写测试不是照抄代码逻辑再断言一遍——真正有用的测试会逼你去想"这里还有没有没考虑到的情况"，这轮真的碰到了两个：
+
+1. **`json format`/`json minify` 和 `json validate` 对同一份畸形输入给出矛盾的结论。** 三个命令底层调用的是 `encoding/json` 的两套不同 API：`validate` 用 `json.Unmarshal`，天然拒绝"一个合法 JSON 值后面跟着多余内容"（比如 `{"a":1} garbage` 或者两个粘在一起的 JSON 对象）；但 `format`/`minify` 用的是 `json.Decoder.Decode`，这个 API 是为读取*一串*JSON 值设计的，`Decode` 一次只消费第一个值，后面的内容不报错、直接忽略。结果就是 `devia json validate` 正确拒绝这种输入，而 `devia json format` 会不声不响地只格式化第一个片段——同一个工具里两个命令对同一份输入给出不一致的判断。修法：加了个 `dec.More()` 检查，`format`/`minify` 现在和 `validate` 一样会拒绝这种输入。这个 bug 是在给 `jsonfmt_test.go` 写"两个对象粘在一起该报错"这个用例时发现的，纯人工审查代码没看出来，因为两段代码单独看都"没问题"。
+2. **`--tz=Asia/Shanghai` 这种具名时区在没装系统时区数据库的机器上会直接报错。** `time.LoadLocation` 依赖 `/usr/share/zoneinfo`，而 devia 是 `CGO_ENABLED=0` 静态编译的，一个常见部署场景就是丢进 `scratch`/`distroless` 这类没有任何系统文件的最小化容器镜像——这种镜像里 `/usr/share/zoneinfo` 根本不存在，`timestamp`/`cron` 一用命名时区就炸。修法：在 `cmd/devia/main.go` 里空白导入了标准库的 `time/tzdata`，把整个时区数据库（~450KB）直接编进二进制，不再依赖部署环境。这个是写 `timestamp_test.go` 之前，为了确认测试环境本身有没有时区数据库时顺带查出来的，跟测试断言本身没关系，但性质上是同一轮"认真核实一遍再动笔"带出来的副产品。
 
 ## 设计上和更早版本的区别
 
@@ -141,6 +148,7 @@ function devia(...args) {
 git clone <this repo>
 cd devia
 
+go test ./...    # 跑测试（184 个测试函数）；加 -v 看逐个用例，加 -race 跑竞态检测
 make build       # 完整版：devia   (CLI + serve)
 make build-min   # 精简版：devia-cli (无 API，体积最小)
 make build-all   # 全平台交叉编译，两个变体各 6 个目标
@@ -278,10 +286,12 @@ curl -s localhost:7654/api/v1/hash \
 ```
 devia/
 ├── cmd/devia/
-│   └── main.go              入口：三行代码，调用 internal/cli.Run()
+│   ├── main.go               入口：main() 调 main2()，main2() 调 internal/cli.Run()
+│   └── main_test.go          黑盒测试：子进程重跑自身二进制，测 exit code/--json/stdin/--quiet
 ├── internal/
 │   ├── cli/                  命令行层
 │   │   ├── run.go             路由分发、--json/--quiet 提取、帮助文本
+│   │   ├── run_test.go
 │   │   ├── output.go           标准输出/错误(what+Try:)/退出码/stdin 读取
 │   │   ├── flags.go             flag.FlagSet 封装
 │   │   ├── hash.go               hash / checksum
@@ -290,35 +300,41 @@ devia/
 │   │   ├── time.go                  timestamp / cron
 │   │   ├── data.go                   radix / regex / diff / cert
 │   │   ├── serve.go                   serve（转发到 internal/server）
-│   │   └── completion.go               bash/zsh/fish 补全脚本生成
+│   │   ├── completion.go               bash/zsh/fish 补全脚本生成
+│   │   └── completion_test.go
 │   ├── server/                HTTP API
 │   │   ├── server.go           (build tag: !noserve) 真实实现
 │   │   └── stub.go               (build tag: noserve)  桩实现
-│   ├── core/                  纯业务逻辑，零外部依赖，CLI 和 API 共用
-│   │   ├── core.go             错误码体系
-│   │   ├── hash.go / checksum.go
-│   │   ├── base64.go / mime.go
-│   │   ├── jsonfmt.go
-│   │   ├── escape.go
-│   │   ├── uuid.go
-│   │   ├── text.go
-│   │   ├── timestamp.go
-│   │   ├── radix.go
-│   │   ├── cron.go
-│   │   ├── regex.go
-│   │   ├── diff.go
-│   │   ├── cert.go
-│   │   └── lorem.go
+│   ├── core/                  纯业务逻辑，零外部依赖，CLI 和 API 共用；每个 .go 都有对应 _test.go
+│   │   ├── core.go / core_test.go             错误码体系
+│   │   ├── hash.go / hash_test.go
+│   │   ├── checksum.go / checksum_test.go
+│   │   ├── base64.go / base64_test.go
+│   │   ├── mime.go / mime_test.go
+│   │   ├── jsonfmt.go / jsonfmt_test.go
+│   │   ├── escape.go / escape_test.go
+│   │   ├── uuid.go / uuid_test.go
+│   │   ├── text.go / text_test.go
+│   │   ├── timestamp.go / timestamp_test.go
+│   │   ├── radix.go / radix_test.go
+│   │   ├── cron.go / cron_test.go
+│   │   ├── regex.go / regex_test.go
+│   │   ├── diff.go / diff_test.go
+│   │   ├── cert.go / cert_test.go
+│   │   └── lorem.go / lorem_test.go
 │   └── version/               单一版本号常量，避免 cli/server 循环依赖
 │       └── version.go
 ├── .github/workflows/
-│   └── release.yml            CI：push/PR 跑 vet+build；tag 或手动触发时编译 3 个平台 zip 并发布
-├── Makefile
+│   └── release.yml            CI：push/PR 跑 vet+test+build；tag 或手动触发时编译 3 个平台 zip 并发布
+├── Makefile                  test/test-race/build/build-min/build-all/size/vet/clean
 ├── build.sh / build.bat
+├── RELEASE_NOTES.md           GitHub Release 正文，release.yml 自动引用
 └── go.mod
 ```
 
 `internal/core` 包里的每个函数都不知道自己是被 CLI 调用还是被 HTTP handler 调用——这是刻意的：逻辑只写一遍，两个入口都是薄适配层。
+
+⚠️ 一个行为变化：`make build`/`build-min`/`build-all` 现在都依赖 `test` 这个 target，也就是说本地 `make build` 会先跑一遍完整测试套件再编译——编译变慢了，但也意味着一个跑不过测试的版本不会被 `make build` 悄悄编出来。只想编译不想等测试，直接跑 `go build ./cmd/devia`（跳过 Makefile）或者 `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o devia ./cmd/devia`（Makefile 里 `build` target 展开后的原始命令）。
 
 ## 已知的取舍（不是 bug，是选择）
 
