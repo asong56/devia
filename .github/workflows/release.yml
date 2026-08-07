@@ -21,7 +21,7 @@ env:
 
 jobs:
   verify:
-    name: vet & build (sanity check)
+    name: vet, test & build (sanity check)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: go vet ./...
+      - name: go test (race detector on)
+        run: go test -race -count=1 ./...
       - name: build devia (full — CLI + serve)
         run: go build -trimpath -ldflags="-s -w" -o /tmp/devia ./cmd/devia
       - name: build devia-cli (cli-only, -tags noserve)
