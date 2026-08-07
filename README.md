@@ -1,4 +1,4 @@
-# devia v1.0.0
+# devia v1.1.0
 
 **devia** is a zero-dependency, single-binary developer toolbox for the command line. Every common task that used to mean reaching for a browser, a Python one-liner, or three different npm packages — hashing, encoding, UUID generation, JSON formatting, cert inspection, cron scheduling, diff, and more — is a subcommand away, scriptable from any language, and pipes cleanly into the rest of your shell.
 
